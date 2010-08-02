@@ -1,0 +1,11 @@
+High:
+ * Segmentation Fault on run query =/ [bson bug]
+   ( http://groups.google.com/group/mongodb-user/browse_thread/thread/560874b38f2e8e0c/d974d75aae73ac2c?lnk=gst&q=bson+segmentation#d974d75aae73ac2c )
+ * NotToAll Authentication
+
+Normal:
+ * Edit function
+ * Add function
+ * Migrate config to YAML
+   ( default port, default host, serverlist )
+ * Simple Login Page (if required for separated users)

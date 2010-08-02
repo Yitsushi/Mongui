@@ -5,12 +5,46 @@ require 'time'
 require 'yajl/json_gem'
 
 HOST_DATA_FILE = 'mongo_hosts.dat'
+DEFAULT_HOST   = 'localhost'
+DEFAULT_PORT   = "27017"
 
 def get_hosts
     if File.exists? HOST_DATA_FILE
-        return File.open(HOST_DATA_FILE,'r').readlines.collect{ |host| host.strip }
+      t = {}
+      File.open(HOST_DATA_FILE,'r').readlines.collect do |host|
+        info = {
+          :username => nil,
+          :password => nil,
+          :host     => nil,
+          :port     => nil
+        }
+        h = host.strip
+        datas = h.split(/@/)
+        if datas.length > 1
+          info[:username], info[:password]  = datas[0].grep(/:/).empty? ?
+                                                [datas[0], nil] :
+                                                datas[0].split(":")
+          info[:host], info[:port]          = datas[1].grep(/:/).empty? ?
+                                                [datas[1], DEFAULT_PORT] :
+                                                datas[1].split(":")
+        else
+          info[:host], info[:port]          = datas[0].grep(/:/).empty? ?
+                                                [datas[0], DEFAULT_PORT] :
+                                                datas[0].split(":")
+        end
+
+        t["#{info[:host]}:#{info[:port]}"] = info
+      end
+      t
     else
-        return ['localhost']
+        return {
+          "#{DEFAULT_HOST}:#{DEFAULT_PORT}" => {
+            :username => nil,
+            :password => nil,
+            :host     => DEFAULT_HOST,
+            :port     => DEFAULT_PORT
+          }
+        }
     end
 end
 
@@ -22,45 +56,59 @@ post '/show_dbs' do
     counter = 1
     data = []
     
-    HOSTS.each do |host|
-        m = Mongo::Connection.new( host,
-                                   27017, #Todo: port should be in the host data file
-                                   :slave_ok => true)
-        
+    HOSTS.each do |name, host|
+        begin
+          m = Mongo::Connection.new( host[:host],
+                                     host[:port].to_i,
+                                     :slave_ok => true)
 
-        host_node = {}
-        host_node[:id] = counter
-        counter += 1
-        host_node[:text] = host
-        host_node[:icon] = 'images/blue.gif'
-        host_node[:children] = []
 
-        m.database_names.each do |db_name|
+          host_node = {}
+          host_node[:id] = counter
+          counter += 1
+          host_node[:text] = name
+          host_node[:icon] = 'images/blue.gif'
+          host_node[:children] = []
 
-            db = m.db(db_name)
-            
-            db_node = {}
-            db_node[:id] = counter
-            counter += 1
-            db_node[:text] = db_name
-            db_node[:icon] = 'images/db.gif'
-            db_node[:children] = []
-
-            db.collection_names.each do |coll_name|
-                coll_node = {}
-                coll_node[:id] = counter
-                counter += 1
-                coll_node[:text] = coll_name
-                coll_node[:leaf] = true
-                db_node[:children] << coll_node
+          begin
+            m.database_names[0]
+          rescue Exception => e
+            f = e.message.grep(/unauthorized for db \[/).join.split(/[\[\]]/)
+            unless host[:username].nil? and f.length < 2
+              m[f[1]].authenticate(host[:username], host[:password])
             end
-            if db_node[:children].size == 0
-                db_node[:leaf] = true
-            end
-            host_node[:children] << db_node
+          end
+
+          m.database_names.each do |db_name|
+              db = m.db(db_name)
+              
+              db_node = {}
+              db_node[:id] = counter
+              counter += 1
+              db_node[:text] = db_name
+              db_node[:icon] = 'images/db.gif'
+              db_node[:children] = []
+
+              db.collection_names.each do |coll_name|
+                  coll_node = {}
+                  coll_node[:id] = counter
+                  counter += 1
+                  coll_node[:text] = coll_name
+                  coll_node[:leaf] = true
+                  db_node[:children] << coll_node
+              end
+              if db_node[:children].size == 0
+                  db_node[:leaf] = true
+              end
+              host_node[:children] << db_node
+          end
+          data << host_node
+          m.close
+        rescue Exception => e
+          p e
+          puts "Could not connect to #{host[:host]}:#{host[:port]}"
+          next
         end
-        data << host_node
-        m.close
     end
 
     return JSON.pretty_generate(data)
@@ -71,11 +119,20 @@ post '/query' do
 
     query = nil
 
+
+    data = HOSTS[params['host']]
     query = JSON.parse(params['query']) if params.has_key?('query')
 
-    m = Mongo::Connection.new( params['host'],
-                               27017,
-                               :slave_ok => true).db(params['db']).collection( params['coll'])
+    db = Mongo::Connection.new( data[:host],
+                                data[:port],
+                                :slave_ok => true).db(params['db'])
+
+    unless data[:username].nil?
+      db.authenticate(data[:username], data[:password])
+    end
+    
+    m = db.collection( params['coll'])
+
     rval = []
     if query == nil
         rval = m.find().limit(100).to_a 
@@ -88,10 +145,18 @@ post '/query' do
 end
 
 post '/stats' do
- m = Mongo::Connection.new( params['host'],
-                               27017,
-                               :slave_ok => true).db(params['db']).collection( params['coll'])
-    return JSON.pretty_generate(m.stats)
+  data = HOSTS[params['host']]
+  
+  db = Mongo::Connection.new( data[:host],
+                              data[:port],
+                              :slave_ok => true).db(params['db'])
+
+  unless data[:username].nil?
+    db.authenticate(data[:username], data[:password])
+  end
+    
+  m = db.collection( params['coll'])
+  return JSON.pretty_generate(m.stats)
 end
 
 
