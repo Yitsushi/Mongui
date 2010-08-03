@@ -892,7 +892,7 @@ Ext.onReady(function () {
 	    items: new Ext.form.TextArea({
                 id: 'edit'+idx,
 	        style: 'font-family:monospace',
-	        emptyText: 'Enter your query in JSON format here!',
+	        emptyText: "Enter your query in JSON format here!\n\n Example: {rights: {'$in': ['ADMIN']}}",
 	        selectOnFocus: true
             }),
             getQuery: function() {

@@ -50,6 +50,10 @@ end
 
 HOSTS = get_hosts
 
+get '/' do
+  redirect 'mongui.html'
+end
+
 post '/show_dbs' do
     
     
