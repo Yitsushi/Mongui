@@ -12,6 +12,8 @@ The server is built off of the Sinatrarb framework: [http://sinatrarb.com/](http
 
 ## Requirements
 
+* ruby (1.9+)
+
 The following ruby gems are required to run the server:
 
 Required Gems:
@@ -21,18 +23,19 @@ Required Gems:
 * mongo (1.0, 0.19.1)
 * rack (1.1.0)
 * sinatra (1.0, 0.9.4)
-
-Optional gems:
-
+* yajl-ruby (0.7.5)
 * bson_ext (1.0)
 * mongo_ext (0.19.1)
 * thin (1.2.7)
-* yajl-ruby (0.7.5)
 
+## Install
 
+    gem install yajl-ruby json thin mongo_ext bson_ext sinatra rack mongo json bson
+    echo "localhost" > mongo_hosts.dat
+    ruby mongui.rb
 
 ## Driver File:
-By default, the server connects to localhost.  To override this add a file named  'mongo_hosts.dat' in the same directory as mongui.rb.
+By default, the server connects to localhost.  To override this add a file named  'mongo\_hosts.dat' in the same directory as mongui.rb.
 
 The file should contain the address of all your Mongo DB servers.  One per line.
 
@@ -41,6 +44,11 @@ The file should contain the address of all your Mongo DB servers.  One per line.
 * username:password@localhost
 * username:password@localhost:27017
 
+if _username_ defined and the specified user is not admin, you need to define collection list
+
+* username:password@localhost:27017/my\_coll
+* username:password@localhost:27017/my\_coll,my\_coll2
+* username:password@localhost:27017/my\_coll,my\_coll2,my\_coll3
 
 ## Running the server:
 ruby mongui.rb  - this will run the server on port 4567

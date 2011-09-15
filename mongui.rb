@@ -13,24 +13,30 @@ def get_hosts
       t = {}
       File.open(HOST_DATA_FILE,'r').readlines.collect do |host|
         info = {
-          :username => nil,
-          :password => nil,
-          :host     => nil,
-          :port     => nil
+          :username     => nil,
+          :password     => nil,
+          :host         => nil,
+          :port         => nil,
+          :collections  => []
         }
         h = host.strip
         datas = h.split(/@/)
         if datas.length > 1
-          info[:username], info[:password]  = datas[0].grep(/:/).empty? ?
+          info[:username], info[:password]  = datas[0].match(/:/).nil? ?
                                                 [datas[0], nil] :
                                                 datas[0].split(":")
-          info[:host], info[:port]          = datas[1].grep(/:/).empty? ?
+          info[:host], info[:port]          = datas[1].match(/:/).nil? ?
                                                 [datas[1], DEFAULT_PORT] :
                                                 datas[1].split(":")
         else
-          info[:host], info[:port]          = datas[0].grep(/:/).empty? ?
+          info[:host], info[:port]          = datas[0].match(/:/).nil? ?
                                                 [datas[0], DEFAULT_PORT] :
                                                 datas[0].split(":")
+        end
+
+        unless h.match(/\//).nil?
+          info[:collections] = h.split(/\//)[1].split(/,/)
+          info[:port] = info[:port].split(/\//)[0]
         end
 
         t["#{info[:host]}:#{info[:port]}"] = info
@@ -55,17 +61,14 @@ get '/' do
 end
 
 post '/show_dbs' do
-    
-    
     counter = 1
     data = []
-    
+
     HOSTS.each do |name, host|
         begin
           m = Mongo::Connection.new( host[:host],
                                      host[:port].to_i,
                                      :slave_ok => true)
-
 
           host_node = {}
           host_node[:id] = counter
@@ -77,21 +80,41 @@ post '/show_dbs' do
           begin
             m.database_names[0]
           rescue Exception => e
-            f = e.message.grep(/unauthorized for db \[/).join.split(/[\[\]]/)
-            unless host[:username].nil? and f.length < 2
-              m[f[1]].authenticate(host[:username], host[:password])
+            unless e.message.match(/unauthorized for db \[/).nil?
+              f = e.message.join.split(/[\[\]]/)
+              unless host[:username].nil? and f.length < 2
+                m[f[1]].authenticate(host[:username], host[:password])
+              end
             end
           end
 
-          m.database_names.each do |db_name|
+          begin
+            db_list = m.database_names
+          rescue
+            db_list = host[:collections]
+          end
+
+          db_list.each do |db_name|
               db = m.db(db_name)
-              
+
               db_node = {}
               db_node[:id] = counter
               counter += 1
               db_node[:text] = db_name
               db_node[:icon] = 'images/db.gif'
               db_node[:children] = []
+
+              begin
+                collections = db.collection_names
+              rescue Exception => e
+                p e.message
+                unless e.message.match(/unauthorized db:/).nil?
+                  f = e.message.split(/[: ]/)
+                  unless host[:username].nil? and f.length < 2
+                    m[f[2]].authenticate(host[:username], host[:password])
+                  end
+                end
+              end
 
               db.collection_names.each do |coll_name|
                   coll_node = {}
@@ -120,9 +143,7 @@ end
 
 
 post '/query' do
-
     query = nil
-
 
     data = HOSTS[params['host']]
     query = JSON.parse(params['query']) if params.has_key?('query')
@@ -134,7 +155,7 @@ post '/query' do
     unless data[:username].nil?
       db.authenticate(data[:username], data[:password])
     end
-    
+
     m = db.collection( params['coll'])
 
     rval = []
@@ -158,9 +179,7 @@ post '/stats' do
   unless data[:username].nil?
     db.authenticate(data[:username], data[:password])
   end
-    
+
   m = db.collection( params['coll'])
   return JSON.pretty_generate(m.stats)
 end
-
-
